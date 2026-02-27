@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+    <!-- SEO -->
+    <title> الكحايلية — منتجات طبيعية فاخرة</title>
+    <meta name="description" content="اكتشف أفضل المنتجات الطبيعية: أعشاب، بهارات، عسل، منتجات العناية والعافية. توصيل لجميع ولايات الجزائر." />
+    <meta name="keywords" content="منتجات طبيعية, أعشاب, بهارات, عسل, ديتوكس, عناية بالشعر, عافية, الجزائر" />
+    <meta name="author" content=" الكحايلية" />
+    <meta name="theme-color" content="#2D5016" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content=" الكحايلية — منتجات طبيعية فاخرة" />
+    <meta property="og:description" content="تسوق أفضل الأعشاب والبهارات والعسل ومنتجات العافية الطبيعية." />
+    <meta property="og:type" content="website" />
+
+    <!-- Apple mobile -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Google Fonts: Inter + Noto Sans Arabic + Playfair Display -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Material Symbols (icons) -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap" />
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="css/styles.css" />
+</head>
+
+<body>
+
+    <!-- HEADER (mobile sticky) -->
+    <header id="site-header" class="site-header" role="banner"></header>
+
+    <!-- MAIN CONTENT (SPA container) -->
+    <main id="app" class="main-content" role="main">
+        <div class="page-loader" id="page-loader">
+            <div class="loader-spinner"></div>
+        </div>
+    </main>
+
+    <!-- TOAST CONTAINER -->
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <!-- CONFIRM DIALOG -->
+    <div id="confirm-dialog" class="confirm-dialog-overlay" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="confirm-dialog">
+            <div class="confirm-dialog__icon">⚠️</div>
+            <h3 class="confirm-dialog__title" id="confirm-dialog-title">هل أنت متأكد؟</h3>
+            <p class="confirm-dialog__message" id="confirm-dialog-msg">لا يمكن التراجع عن هذا الإجراء.</p>
+            <div class="confirm-dialog__actions">
+                <button id="confirm-cancel" class="btn btn--outline">إلغاء</button>
+                <button id="confirm-ok" class="btn btn--danger">حذف</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOTTOM NAVIGATION (mobile) -->
+    <nav id="bottom-nav" class="bottom-nav" role="navigation" aria-label="التنقل الرئيسي"></nav>
+
+    <!-- SCRIPTS (order matters) -->
+    <script src="js/i18n.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/components/header.js"></script>
+    <script src="js/components/footer.js"></script>
+    <script src="js/components/bottomNav.js"></script>
+    <script src="js/components/productCard.js"></script>
+    <script src="js/pages/home.js"></script>
+    <script src="js/pages/category.js"></script>
+    <script src="js/pages/product.js"></script>
+    <script src="js/pages/cart.js"></script>
+    <script src="js/pages/orders.js"></script>
+    <script src="js/pages/checkout.js"></script>
+    <script src="js/pages/admin.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>
