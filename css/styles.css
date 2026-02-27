@@ -309,7 +309,28 @@ h5 {
     background: var(--clr-forest);
     color: var(--clr-white) !important;
     border-radius: var(--radius-sm) !important;
-    font-family: 'Inter', sans-serif !important
+    font-family: 'Inter', sans-serif !important;
+    transition: all .3s var(--ease)
+}
+
+.lang-toggle--switching {
+    animation: langSwitch .3s var(--ease);
+    opacity: .5;
+    pointer-events: none
+}
+
+@keyframes langSwitch {
+    0% {
+        transform: scale(1) rotate(0deg)
+    }
+
+    50% {
+        transform: scale(.8) rotate(180deg)
+    }
+
+    100% {
+        transform: scale(1) rotate(360deg)
+    }
 }
 
 
@@ -564,9 +585,11 @@ h5 {
     0% {
         transform: scale(0)
     }
+
     60% {
         transform: scale(1.3)
     }
+
     100% {
         transform: scale(1)
     }
@@ -832,6 +855,7 @@ h5 {
     line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden
 }
@@ -1208,6 +1232,7 @@ h5 {
     line-height: 1.3;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden
 }
@@ -1973,6 +1998,7 @@ h5 {
         opacity: 0;
         transform: translateY(20px)
     }
+
     to {
         opacity: 1;
         transform: translateY(0)
@@ -1984,6 +2010,7 @@ h5 {
         opacity: 0;
         transform: translateY(-12px)
     }
+
     to {
         opacity: 1;
         transform: translateY(0)
@@ -1994,6 +2021,7 @@ h5 {
     from {
         opacity: 0
     }
+
     to {
         opacity: 1
     }
@@ -2003,6 +2031,7 @@ h5 {
     0% {
         background-position: 200% 0
     }
+
     100% {
         background-position: -200% 0
     }
@@ -2019,6 +2048,7 @@ h5 {
         opacity: 0;
         transform: translateY(-20px)
     }
+
     to {
         opacity: 1;
         transform: translateY(0)
@@ -2037,6 +2067,7 @@ h5 {
         opacity: 0;
         transform: translateY(30px)
     }
+
     to {
         opacity: 1;
         transform: translateY(0)
@@ -2044,10 +2075,12 @@ h5 {
 }
 
 @keyframes pulse {
+
     0%,
     100% {
         transform: scale(1)
     }
+
     50% {
         transform: scale(1.15)
     }
