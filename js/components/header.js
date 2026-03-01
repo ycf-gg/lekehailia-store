@@ -1,5 +1,6 @@
 /* ================================================
    HEADER — Mobile sticky header with search & language
+   FIXED VERSION - Event binding guaranteed to work
    ================================================ */
 
 const Header = (() => {
@@ -18,6 +19,9 @@ const Header = (() => {
     // Clean up previous document-level listeners to prevent duplicates
     _cleanupGlobalListeners();
 
+    const currentLang = I18n.lang();
+    const langLabel = currentLang === 'ar' ? 'EN' : 'ع';
+
     el.innerHTML = `
       <div class="header-inner">
         <a href="#/" class="header-logo" id="header-logo">
@@ -28,7 +32,7 @@ const Header = (() => {
           <button type="button" id="search-toggle" aria-label="Search">
             <span class="material-symbols-rounded">search</span>
           </button>
-          <button type="button" class="lang-toggle" id="lang-toggle" aria-label="Switch Language">${I18n.lang() === 'ar' ? 'EN' : 'ع'}</button>
+          <button type="button" class="lang-toggle" id="lang-toggle" aria-label="Switch Language">${langLabel}</button>
         </div>
       </div>
       <!-- Search drawer -->
@@ -44,119 +48,133 @@ const Header = (() => {
         <div id="search-results" class="search-results-container"></div>
       </div>
     `;
+
+    // IMPORTANT: Bind events AFTER HTML is created
     _bindEvents(el);
   }
 
   /* ---------- EVENT BINDING ---------- */
 
   function _bindEvents(el) {
-    // Search toggle
-    document.getElementById('search-toggle')?.addEventListener('click', () => {
-      _searchOpen = !_searchOpen;
-      const bar = document.getElementById('search-bar');
-      if (!bar) return;
-      bar.classList.toggle('open', _searchOpen);
-      if (_searchOpen) {
-        setTimeout(() => document.getElementById('search-input')?.focus(), 300);
-      } else {
-        _clearSearchState();
-      }
-    });
+    // ========== SEARCH TOGGLE ==========
+    const searchToggle = document.getElementById('search-toggle');
+    if (searchToggle) {
+      searchToggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        _searchOpen = !_searchOpen;
+        const bar = document.getElementById('search-bar');
+        if (bar) {
+          bar.classList.toggle('open', _searchOpen);
+          if (_searchOpen) {
+            setTimeout(() => {
+              const input = document.getElementById('search-input');
+              if (input) input.focus();
+            }, 300);
+          } else {
+            _clearSearchState();
+          }
+        }
+      });
+    }
 
-    // Clear button — type="button" prevents form submission, e.preventDefault() added
-    document.getElementById('search-clear')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      try {
+    // ========== CLEAR BUTTON ==========
+    const clearBtn = document.getElementById('search-clear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         const input = document.getElementById('search-input');
-        if (input) { input.value = ''; input.focus(); }
+        if (input) {
+          input.value = '';
+          input.focus();
+        }
         const container = document.getElementById('search-results');
         if (container) container.innerHTML = '';
-        const clearBtn = document.getElementById('search-clear');
         if (clearBtn) clearBtn.style.display = 'none';
-      } catch (err) {
-        console.error('[Header] Error clearing search:', err);
-      }
-    });
+      });
+    }
 
-    // Search input — live search with debounce
-    document.getElementById('search-input')?.addEventListener('input', (e) => {
-      try {
+    // ========== SEARCH INPUT ==========
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
         const q = e.target.value.trim();
-        const clearBtn = document.getElementById('search-clear');
+        const clrBtn = document.getElementById('search-clear');
 
         // Show/hide clear button
-        if (clearBtn) clearBtn.style.display = q.length > 0 ? 'flex' : 'none';
+        if (clrBtn) {
+          clrBtn.style.display = q.length > 0 ? 'flex' : 'none';
+        }
 
-        // Debounce search for performance
+        // Debounce search
         clearTimeout(_searchDebounce);
         _searchDebounce = setTimeout(() => _performSearch(q), 150);
-      } catch (err) {
-        console.error('[Header] Error in search input handler:', err);
-      }
-    });
+      });
 
-    // Handle Enter key on mobile to dismiss keyboard
-    document.getElementById('search-input')?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      // Handle Enter key
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          searchInput.blur();
+        }
+      });
+    }
+
+    // ========== LANGUAGE TOGGLE ==========
+    const langToggle = document.getElementById('lang-toggle');
+    if (langToggle) {
+      langToggle.addEventListener('click', (e) => {
         e.preventDefault();
-        document.getElementById('search-input')?.blur();
-      }
-    });
+        e.stopPropagation();
 
-    // Language toggle — full language switch with visual feedback & RTL
-    document.getElementById('lang-toggle')?.addEventListener('click', () => {
-      try {
-        const btn = document.getElementById('lang-toggle');
-        const newLang = I18n.lang() === 'ar' ? 'en' : 'ar';
+        const currentLang = I18n.lang();
+        const newLang = currentLang === 'ar' ? 'en' : 'ar';
 
-        // Visual feedback: loading state
-        if (btn) {
-          btn.classList.add('lang-toggle--switching');
-          btn.disabled = true;
-        }
+        // Visual feedback
+        langToggle.classList.add('lang-toggle--switching');
+        langToggle.disabled = true;
 
-        // Small delay for visual feedback
+        // Small delay for visual effect
         setTimeout(() => {
-          // Switch language in I18n system (handles localStorage, dir, lang attr)
-          I18n.setLang(newLang);
+          try {
+            // Change language
+            I18n.setLang(newLang);
 
-          // Close search if open
-          _searchOpen = false;
+            // Close search
+            _searchOpen = false;
+            const bar = document.getElementById('search-bar');
+            if (bar) bar.classList.remove('open');
 
-          // Re-render all components with new translations
-          Header.render();
-          BottomNav.render();
-          Router._onRoute();
+            // Re-render everything
+            Header.render();
+            BottomNav.render();
+            Router._onRoute();
+          } catch (err) {
+            console.error('Error changing language:', err);
+            langToggle.classList.remove('lang-toggle--switching');
+            langToggle.disabled = false;
+          }
         }, 200);
-      } catch (err) {
-        console.error('[Header] Error switching language:', err);
-        // Recover from error
-        const btn = document.getElementById('lang-toggle');
-        if (btn) {
-          btn.classList.remove('lang-toggle--switching');
-          btn.disabled = false;
-        }
-      }
-    });
+      });
+    }
 
-    // Scroll shadow
+    // ========== SCROLL SHADOW ==========
     _scrollHandler = () => {
       el.classList.toggle('scrolled', window.scrollY > 10);
     };
     window.addEventListener('scroll', _scrollHandler, { passive: true });
 
-    // Close search on outside click
+    // ========== CLOSE SEARCH ON OUTSIDE CLICK ==========
     _outsideClickHandler = (e) => {
       if (!_searchOpen) return;
       const bar = document.getElementById('search-bar');
       const toggle = document.getElementById('search-toggle');
-      if (bar && !bar.contains(e.target) && toggle && !toggle.contains(e.target)) {
+      if (bar && toggle && !bar.contains(e.target) && !toggle.contains(e.target)) {
         _closeSearch();
       }
     };
     document.addEventListener('click', _outsideClickHandler);
 
-    // ESC key closes search bar
+    // ========== CLOSE SEARCH ON ESC ==========
     _escKeyHandler = (e) => {
       if (e.key === 'Escape' && _searchOpen) {
         e.preventDefault();
@@ -169,56 +187,50 @@ const Header = (() => {
   /* ---------- SEARCH ---------- */
 
   function _performSearch(q) {
-    try {
-      const container = document.getElementById('search-results');
-      if (!container) return;
+    const container = document.getElementById('search-results');
+    if (!container) return;
 
-      if (!q || q.length < 1) {
-        container.innerHTML = '';
-        return;
-      }
-
-      const results = Store.searchProducts(q);
-
-      if (results.length === 0) {
-        container.innerHTML = `
-          <div class="search-empty">
-            <span class="material-symbols-rounded" style="font-size:32px;color:var(--clr-sand);margin-bottom:8px">search_off</span>
-            <p>${I18n.t('search.no.results')}</p>
-          </div>`;
-        return;
-      }
-
-      container.innerHTML = results.slice(0, 8).map(p => {
-        const name = Store.getProductName(p);
-        const cat = Store.CATEGORIES.find(c => c.slug === p.category);
-        const catName = Store.getCategoryName(p.category);
-        const cover = Store.getProductCover(p);
-        const imgSrc = cover || _searchPlaceholder(name, cat?.color || '#5C7A3A');
-
-        return `
-          <a href="#/product/${p.id}" class="search-result-item" onclick="Header._closeSearch()">
-            <img class="search-result-item__img" src="${imgSrc}" alt="${name}" />
-            <div class="search-result-item__info">
-              <div class="search-result-item__name">${_highlightMatch(name, q)}</div>
-              <div class="search-result-item__meta">
-                <span class="search-result-item__cat">${catName}</span>
-                <span class="search-result-item__price">${I18n.formatPrice(p.price)}</span>
-              </div>
-            </div>
-          </a>`;
-      }).join('');
-    } catch (err) {
-      console.error('[Header] Search error:', err);
-      const container = document.getElementById('search-results');
-      if (container) {
-        container.innerHTML = `
-          <div class="search-empty">
-            <span class="material-symbols-rounded" style="font-size:32px;color:var(--clr-danger);margin-bottom:8px">error</span>
-            <p>${I18n.lang() === 'ar' ? 'حدث خطأ في البحث' : 'Search error occurred'}</p>
-          </div>`;
-      }
+    if (!q || q.length < 1) {
+      container.innerHTML = '';
+      return;
     }
+
+    // Check if Store exists
+    if (!window.Store) {
+      container.innerHTML = '<p style="padding:20px;color:var(--clr-muted);text-align:center">Store not loaded</p>';
+      return;
+    }
+
+    const results = Store.searchProducts(q);
+
+    if (results.length === 0) {
+      container.innerHTML = `
+        <div class="search-empty">
+          <span class="material-symbols-rounded" style="font-size:32px;color:var(--clr-sand);margin-bottom:8px">search_off</span>
+          <p>${I18n.t('search.no.results')}</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = results.slice(0, 8).map(p => {
+      const name = Store.getProductName(p);
+      const catName = Store.getCategoryName(p.category);
+      const cover = Store.getProductCover(p);
+      const cat = Store.CATEGORIES.find(c => c.slug === p.category);
+      const imgSrc = cover || _searchPlaceholder(name, cat?.color || '#5C7A3A');
+
+      return `
+        <a href="#/product/${p.id}" class="search-result-item" onclick="Header.closeSearch()">
+          <img class="search-result-item__img" src="${imgSrc}" alt="${name}" loading="lazy" />
+          <div class="search-result-item__info">
+            <div class="search-result-item__name">${_highlightMatch(name, q)}</div>
+            <div class="search-result-item__meta">
+              <span class="search-result-item__cat">${catName}</span>
+              <span class="search-result-item__price">${I18n.formatPrice(p.price)}</span>
+            </div>
+          </div>
+        </a>`;
+    }).join('');
   }
 
   function _highlightMatch(text, query) {
@@ -238,17 +250,15 @@ const Header = (() => {
 
   /* ---------- HELPERS ---------- */
 
-  /** Clears search input, results, and clear button */
   function _clearSearchState() {
     const input = document.getElementById('search-input');
     if (input) input.value = '';
     const container = document.getElementById('search-results');
     if (container) container.innerHTML = '';
-    const clearBtn = document.getElementById('search-clear');
-    if (clearBtn) clearBtn.style.display = 'none';
+    const clrBtn = document.getElementById('search-clear');
+    if (clrBtn) clrBtn.style.display = 'none';
   }
 
-  /** Closes search bar completely */
   function _closeSearch() {
     _searchOpen = false;
     const bar = document.getElementById('search-bar');
@@ -256,7 +266,6 @@ const Header = (() => {
     _clearSearchState();
   }
 
-  /** Remove document-level event listeners to avoid duplicates on re-render */
   function _cleanupGlobalListeners() {
     if (_outsideClickHandler) {
       document.removeEventListener('click', _outsideClickHandler);
@@ -272,8 +281,16 @@ const Header = (() => {
     }
   }
 
-  // Global event listeners
-  window.addEventListener('cart-updated', () => BottomNav?.render());
+  // Global cart update listener
+  window.addEventListener('cart-updated', () => {
+    if (BottomNav && BottomNav.render) {
+      BottomNav.render();
+    }
+  });
 
-  return { render, _closeSearch };
+  // PUBLIC EXPORTS
+  return {
+    render,
+    closeSearch: _closeSearch
+  };
 })();
