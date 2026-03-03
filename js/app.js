@@ -1,5 +1,6 @@
 /* ================================================
    APP.JS — SPA Router, Toast, Confirm, SEO
+   Now waits for Firebase/Store initialization
    ================================================ */
 
 /* ---------- TOAST ---------- */
@@ -57,22 +58,44 @@ const SEO = (() => {
 /* ---------- SPA ROUTER ---------- */
 const Router = (() => {
     const app = document.getElementById('app');
+    let _ready = false;
 
     function init() {
-        window.addEventListener('hashchange', _onRoute);
-        window.addEventListener('DOMContentLoaded', () => {
+        // Show loading state
+        app.innerHTML = '<div class="page-loader"><div class="loader-spinner"></div></div>';
+
+        // Wait for Firebase + Store to be ready before first route
+        Store.init().then(() => {
+            _ready = true;
+            console.log('🚀 Store ready — starting router');
+
+            window.addEventListener('hashchange', _onRoute);
+
+            // Initial setup
+            if (document.readyState === 'loading') {
+                window.addEventListener('DOMContentLoaded', () => {
+                    Header.render();
+                    BottomNav.render();
+                    _onRoute();
+                });
+            } else {
+                Header.render();
+                BottomNav.render();
+                _onRoute();
+            }
+        }).catch(err => {
+            console.error('Store init failed:', err);
+            // Still boot the app with whatever data we have
+            _ready = true;
             Header.render();
             BottomNav.render();
             _onRoute();
         });
-        if (document.readyState !== 'loading') {
-            Header.render();
-            BottomNav.render();
-            _onRoute();
-        }
     }
 
     function _onRoute() {
+        if (!_ready) return;
+
         const hash = location.hash || '#/';
         const parts = hash.replace('#/', '').split('/');
         const page = parts[0] || '';

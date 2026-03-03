@@ -1,5 +1,6 @@
 /* ================================================
    ADMIN PAGE — Mobile dashboard with IMAGE UPLOAD + DELIVERY PRICES
+   Updated for Firebase Authentication (async login)
    ================================================ */
 
 const AdminPage = (() => {
@@ -20,19 +21,39 @@ const AdminPage = (() => {
           <h2>${I18n.t('admin.login')}</h2>
           <form id="admin-login-form" style="margin-top:16px">
             <input type="password" id="admin-pass" placeholder="${I18n.t('admin.login.ph')}" autocomplete="off" />
-            <button type="submit" class="btn btn--primary btn--block">${I18n.t('admin.login.btn')}</button>
+            <button type="submit" class="btn btn--primary btn--block" id="admin-login-btn">${I18n.t('admin.login.btn')}</button>
           </form>
           <p id="admin-err" style="color:var(--clr-danger);margin-top:10px;font-size:.82rem;display:none">${I18n.t('admin.login.err')}</p>
         </div>
       </div>`;
 
-    document.getElementById('admin-login-form').addEventListener('submit', (e) => {
+    document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (Store.adminLogin(document.getElementById('admin-pass').value)) {
-        _renderDashboard(container);
-      } else {
+      const btn = document.getElementById('admin-login-btn');
+      const passInput = document.getElementById('admin-pass');
+      const password = passInput.value;
+
+      // Show loading state
+      btn.disabled = true;
+      btn.textContent = I18n.t('loading') || '...';
+
+      try {
+        const success = await Store.adminLogin(password);
+        if (success) {
+          Toast.show(I18n.t('admin.login.btn') + ' ✅', 'success');
+          _renderDashboard(container);
+        } else {
+          document.getElementById('admin-err').style.display = 'block';
+          passInput.value = '';
+          btn.disabled = false;
+          btn.textContent = I18n.t('admin.login.btn');
+        }
+      } catch (err) {
+        console.error('Login error:', err);
         document.getElementById('admin-err').style.display = 'block';
-        document.getElementById('admin-pass').value = '';
+        passInput.value = '';
+        btn.disabled = false;
+        btn.textContent = I18n.t('admin.login.btn');
       }
     });
   }
@@ -416,9 +437,9 @@ const AdminPage = (() => {
 
   /* ===================== EVENT BINDING ===================== */
   function _bindEvents(container) {
-    // Logout
-    document.getElementById('admin-logout')?.addEventListener('click', () => {
-      Store.adminLogout();
+    // Logout (now async)
+    document.getElementById('admin-logout')?.addEventListener('click', async () => {
+      await Store.adminLogout();
       render(container);
     });
 
@@ -467,7 +488,7 @@ const AdminPage = (() => {
     // Reset to defaults
     document.getElementById('reset-delivery-prices')?.addEventListener('click', () => {
       ConfirmDialog.show(I18n.t('admin.delivery.reset') + '?', () => {
-        localStorage.removeItem('natural_store_delivery_prices');
+        Store.saveDeliveryPrices(null); // Will trigger Firebase to use defaults on next load
         activeTab = 'delivery';
         _renderDashboard(container);
         Toast.show(I18n.t('admin.updated'), 'success');
@@ -527,11 +548,9 @@ const AdminPage = (() => {
       products.push({ id: newId, price, category, images: [] });
       Store.saveProducts(products);
 
-      // Save images for the new product
+      // Save images for the new product to Firebase
       if (_newProductImages.length > 0) {
-        const imgStore = JSON.parse(localStorage.getItem('natural_store_images') || '{}');
-        imgStore[newId] = _newProductImages;
-        localStorage.setItem('natural_store_images', JSON.stringify(imgStore));
+        FirebaseApp.write(`images/${newId}`, _newProductImages).catch(() => { });
       }
 
       Toast.show(`"${name}" — ${I18n.t('admin.added')}`, 'success');

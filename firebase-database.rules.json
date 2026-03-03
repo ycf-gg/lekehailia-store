@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "products": {
+      ".read": true,
+      ".write": "auth != null && !auth.token.firebase.sign_in_provider.match('anonymous')"
+    },
+    "images": {
+      ".read": true,
+      ".write": "auth != null && !auth.token.firebase.sign_in_provider.match('anonymous')"
+    },
+    "deliveryPrices": {
+      ".read": true,
+      ".write": "auth != null && !auth.token.firebase.sign_in_provider.match('anonymous')"
+    },
+    "carts": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "orders": {
+      ".read": "auth != null",
+      ".write": "auth != null",
+      "$orderId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}

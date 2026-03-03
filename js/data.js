@@ -1,17 +1,22 @@
 /* ================================================
-   DATA LAYER — Prices in Algerian Dinar (DZD)
-   Delivery prices for all 58 wilayas
+   DATA LAYER — Firebase Realtime Database Backend
+   Prices in Algerian Dinar (DZD)
+   All 58 wilayas with delivery prices
+   
+   PUBLIC API remains synchronous via local cache.
+   Firebase syncs in background + real-time listeners.
    ================================================ */
 
 const Store = (() => {
-  const KEYS = {
-    products: 'natural_store_products',
-    images: 'natural_store_images',
-    cart: 'natural_store_cart',
-    orders: 'natural_store_orders',
-    adminAuth: 'natural_store_admin_auth',
-    deliveryPrices: 'natural_store_delivery_prices'
-  };
+  /* ============ LOCAL CACHE ============ */
+  // We keep a local in-memory cache so the UI can read synchronously
+  // Firebase syncs in background and updates the cache via listeners
+  let _products = null;
+  let _cart = [];
+  let _orders = [];
+  let _deliveryPrices = null;
+  let _images = {};
+  let _initialized = false;
 
   const DEFAULT_PRODUCTS = [
     // HERBS & SPICES
@@ -130,14 +135,151 @@ const Store = (() => {
     return I18n.t('cat.' + slug + '.desc');
   }
 
-  /* ============ DELIVERY PRICES ============ */
-  function getDeliveryPrices() {
-    const overrides = _load(KEYS.deliveryPrices);
-    if (overrides) return overrides;
-    return [...DEFAULT_DELIVERY_PRICES];
+  /* ============================================================
+     FIREBASE INITIALIZATION — Load data, setup listeners
+     ============================================================ */
+  function _initFirebase() {
+    return new Promise((resolve) => {
+      FirebaseApp.onReady((user) => {
+        if (!user) {
+          // Firebase offline or failed — use defaults
+          console.warn('⚠️ Firebase unavailable, using defaults');
+          _products = [...DEFAULT_PRODUCTS];
+          _deliveryPrices = [...DEFAULT_DELIVERY_PRICES];
+          _cart = [];
+          _orders = [];
+          _images = {};
+          _initialized = true;
+          resolve();
+          return;
+        }
+
+        const uid = user.uid;
+
+        // Load all data in parallel
+        Promise.all([
+          // Products (shared — stored at /products)
+          FirebaseApp.readOnce('products'),
+          // Cart (per-user — stored at /carts/{uid})
+          FirebaseApp.readOnce(`carts/${uid}`),
+          // Orders (all orders at /orders, filtered client-side for user)
+          FirebaseApp.readOnce('orders'),
+          // Delivery prices (shared — stored at /deliveryPrices)
+          FirebaseApp.readOnce('deliveryPrices'),
+          // Images (shared — stored at /images)
+          FirebaseApp.readOnce('images'),
+        ]).then(([products, cart, orders, deliveryPrices, images]) => {
+          // Products: use Firebase data or seed defaults
+          if (products && Array.isArray(products) && products.length > 0) {
+            _products = products;
+          } else if (products && typeof products === 'object') {
+            // Convert object to array if stored as object
+            _products = Object.values(products);
+          } else {
+            _products = [...DEFAULT_PRODUCTS];
+            // Seed Firebase with default products
+            FirebaseApp.write('products', DEFAULT_PRODUCTS).catch(() => { });
+          }
+
+          // Cart: per-user
+          _cart = cart ? (Array.isArray(cart) ? cart : Object.values(cart)) : [];
+
+          // Orders: stored as object with keys
+          if (orders && typeof orders === 'object') {
+            _orders = Object.values(orders);
+            // Sort by date descending
+            _orders.sort((a, b) => new Date(b.date) - new Date(a.date));
+          } else {
+            _orders = [];
+          }
+
+          // Delivery prices
+          if (deliveryPrices && Array.isArray(deliveryPrices) && deliveryPrices.length > 0) {
+            _deliveryPrices = deliveryPrices;
+          } else if (deliveryPrices && typeof deliveryPrices === 'object') {
+            _deliveryPrices = Object.values(deliveryPrices);
+          } else {
+            _deliveryPrices = [...DEFAULT_DELIVERY_PRICES];
+            // Seed Firebase
+            FirebaseApp.write('deliveryPrices', DEFAULT_DELIVERY_PRICES).catch(() => { });
+          }
+
+          // Images
+          _images = images || {};
+
+          _initialized = true;
+          console.log('✅ Data loaded from Firebase');
+
+          // Setup real-time listeners
+          _setupListeners(uid);
+
+          resolve();
+        }).catch(err => {
+          console.error('Firebase data load error:', err);
+          // Fallback to defaults
+          _products = [...DEFAULT_PRODUCTS];
+          _deliveryPrices = [...DEFAULT_DELIVERY_PRICES];
+          _cart = [];
+          _orders = [];
+          _images = {};
+          _initialized = true;
+          resolve();
+        });
+      });
+    });
   }
 
-  function saveDeliveryPrices(prices) { _save(KEYS.deliveryPrices, prices); }
+  /* ============ REAL-TIME LISTENERS ============ */
+  function _setupListeners(uid) {
+    // Listen for cart changes (multi-device sync!)
+    FirebaseApp.listen(`carts/${uid}`, (data) => {
+      const newCart = data ? (Array.isArray(data) ? data : Object.values(data)) : [];
+      // Only update if different from current
+      if (JSON.stringify(newCart) !== JSON.stringify(_cart)) {
+        _cart = newCart;
+        window.dispatchEvent(new CustomEvent('cart-updated'));
+      }
+    });
+
+    // Listen for product changes (admin updates reflect everywhere)
+    FirebaseApp.listen('products', (data) => {
+      if (data) {
+        _products = Array.isArray(data) ? data : Object.values(data);
+      }
+    });
+
+    // Listen for order changes
+    FirebaseApp.listen('orders', (data) => {
+      if (data && typeof data === 'object') {
+        _orders = Object.values(data);
+        _orders.sort((a, b) => new Date(b.date) - new Date(a.date));
+      }
+    });
+
+    // Listen for delivery price changes
+    FirebaseApp.listen('deliveryPrices', (data) => {
+      if (data) {
+        _deliveryPrices = Array.isArray(data) ? data : Object.values(data);
+      }
+    });
+
+    // Listen for image changes
+    FirebaseApp.listen('images', (data) => {
+      _images = data || {};
+    });
+  }
+
+  /* ============ DELIVERY PRICES ============ */
+  function getDeliveryPrices() {
+    return _deliveryPrices ? [..._deliveryPrices] : [...DEFAULT_DELIVERY_PRICES];
+  }
+
+  function saveDeliveryPrices(prices) {
+    _deliveryPrices = prices;
+    FirebaseApp.write('deliveryPrices', prices).catch(err => {
+      console.error('Error saving delivery prices:', err);
+    });
+  }
 
   function getDeliveryPrice(wilayaCode) {
     const prices = getDeliveryPrices();
@@ -161,15 +303,24 @@ const Store = (() => {
     return I18n.lang() === 'ar' ? w.ar : w.en;
   }
 
-  /* PRODUCTS */
+  /* ============ PRODUCTS ============ */
   function getProducts() {
-    const overrides = _load(KEYS.products);
-    if (overrides) return overrides;
-    return [...DEFAULT_PRODUCTS];
+    return _products ? [..._products] : [...DEFAULT_PRODUCTS];
   }
 
-  function saveProducts(products) { _save(KEYS.products, products); }
-  function resetProducts() { localStorage.removeItem(KEYS.products); }
+  function saveProducts(products) {
+    _products = products;
+    FirebaseApp.write('products', products).catch(err => {
+      console.error('Error saving products:', err);
+    });
+  }
+
+  function resetProducts() {
+    _products = [...DEFAULT_PRODUCTS];
+    FirebaseApp.write('products', DEFAULT_PRODUCTS).catch(err => {
+      console.error('Error resetting products:', err);
+    });
+  }
 
   function getProductsByCategory(slug) {
     return getProducts().filter(p => p.category === slug);
@@ -212,78 +363,119 @@ const Store = (() => {
     });
   }
 
-  /* CART */
-  function getCart() { return _load(KEYS.cart) || []; }
-  function saveCart(cart) {
-    _save(KEYS.cart, cart);
+  /* ============ CART (per-user, synced across devices) ============ */
+  function getCart() { return [..._cart]; }
+
+  function _saveCartToFirebase() {
+    const uid = FirebaseApp.uid();
+    if (uid) {
+      FirebaseApp.write(`carts/${uid}`, _cart).catch(err => {
+        console.error('Error saving cart:', err);
+      });
+    }
     window.dispatchEvent(new CustomEvent('cart-updated'));
   }
+
+  function saveCart(cart) {
+    _cart = cart;
+    _saveCartToFirebase();
+  }
+
   function addToCart(productId, qty = 1) {
-    const cart = getCart();
-    const existing = cart.find(i => i.productId === productId);
+    const existing = _cart.find(i => i.productId === productId);
     if (existing) { existing.quantity += qty; }
-    else { cart.push({ productId, quantity: qty }); }
-    saveCart(cart);
+    else { _cart.push({ productId, quantity: qty }); }
+    _saveCartToFirebase();
   }
+
   function removeFromCart(productId) {
-    saveCart(getCart().filter(i => i.productId !== productId));
+    _cart = _cart.filter(i => i.productId !== productId);
+    _saveCartToFirebase();
   }
+
   function updateCartQty(productId, qty) {
-    const cart = getCart();
-    const item = cart.find(i => i.productId === productId);
-    if (item) { item.quantity = Math.max(1, qty); saveCart(cart); }
+    const item = _cart.find(i => i.productId === productId);
+    if (item) { item.quantity = Math.max(1, qty); _saveCartToFirebase(); }
   }
-  function clearCart() { saveCart([]); }
-  function getCartCount() { return getCart().reduce((s, i) => s + i.quantity, 0); }
+
+  function clearCart() {
+    _cart = [];
+    _saveCartToFirebase();
+  }
+
+  function getCartCount() { return _cart.reduce((s, i) => s + i.quantity, 0); }
+
   function getCartTotal() {
-    return getCart().reduce((total, item) => {
+    return _cart.reduce((total, item) => {
       const product = getProduct(item.productId);
       return product ? total + product.price * item.quantity : total;
     }, 0);
   }
 
-  /* ORDERS */
-  function getOrders() { return _load(KEYS.orders) || []; }
+  /* ============ ORDERS ============ */
+  function getOrders() {
+    // For anonymous users, show orders tied to their UID
+    // For admin, show all orders
+    if (FirebaseApp.isAdmin()) {
+      return [..._orders];
+    }
+    const uid = FirebaseApp.uid();
+    return _orders.filter(o => o.userUid === uid);
+  }
+
   function saveOrder(order) {
-    const orders = getOrders();
     order.id = 'ORD-' + Date.now().toString(36).toUpperCase();
     order.date = new Date().toISOString();
     order.status = 'pending';
-    orders.unshift(order);
-    _save(KEYS.orders, orders);
+    order.userUid = FirebaseApp.uid() || 'anonymous';
+
+    // Push to Firebase orders collection
+    FirebaseApp.write(`orders/${order.id}`, order).catch(err => {
+      console.error('Error saving order:', err);
+    });
+
+    // Also add to local cache
+    _orders.unshift(order);
+
     return order;
   }
+
   function updateOrderStatus(orderId, status) {
-    const orders = getOrders();
-    const order = orders.find(o => o.id === orderId);
-    if (order) { order.status = status; _save(KEYS.orders, orders); }
+    const order = _orders.find(o => o.id === orderId);
+    if (order) {
+      order.status = status;
+      FirebaseApp.update(`orders/${orderId}`, { status }).catch(err => {
+        console.error('Error updating order status:', err);
+      });
+    }
   }
 
-  /* ADMIN */
-  const ADMIN_PASSWORD = 'admin123';
-  function isAdminAuth() { return sessionStorage.getItem(KEYS.adminAuth) === 'true'; }
+  /* ============ ADMIN AUTH (Firebase Authentication) ============ */
+  function isAdminAuth() {
+    return FirebaseApp.isAdmin();
+  }
+
   function adminLogin(password) {
-    if (password === ADMIN_PASSWORD) { sessionStorage.setItem(KEYS.adminAuth, 'true'); return true; }
-    return false;
+    // This now returns a Promise!
+    // But we need to stay compatible with the sync API in admin.js
+    // So we use a wrapper pattern
+    return FirebaseApp.adminLogin(password);
   }
-  function adminLogout() { sessionStorage.removeItem(KEYS.adminAuth); }
 
-  /* ============ IMAGE MANAGEMENT ============ */
-  // Images stored separately to avoid bloating product JSON
-  function _getImageStore() { return _load(KEYS.images) || {}; }
-  function _saveImageStore(store) { _save(KEYS.images, store); }
+  function adminLogout() {
+    return FirebaseApp.adminLogout();
+  }
 
+  /* ============ IMAGE MANAGEMENT (Firebase) ============ */
   /** Get all images for a product (returns array of base64 data URLs) */
   function getProductImages(productId) {
-    const store = _getImageStore();
-    return store[productId] || [];
+    return _images[productId] || [];
   }
 
-  /** Get the first/cover image for a product (used by cards, cart, etc.) */
+  /** Get the first/cover image for a product */
   function getProductCover(product) {
     const imgs = getProductImages(product.id);
     if (imgs.length > 0) return imgs[0];
-    // Fallback: legacy single image field
     if (product.image) return product.image;
     return '';
   }
@@ -291,29 +483,33 @@ const Store = (() => {
   /** Add an image to a product (max 4). Returns promise. */
   function addProductImage(productId, file) {
     return compressImage(file, 800, 0.7).then(dataUrl => {
-      const store = _getImageStore();
-      if (!store[productId]) store[productId] = [];
-      if (store[productId].length >= 4) return false; // max 4 images
-      store[productId].push(dataUrl);
-      _saveImageStore(store);
+      if (!_images[productId]) _images[productId] = [];
+      if (_images[productId].length >= 4) return false;
+      _images[productId].push(dataUrl);
+      // Save to Firebase
+      FirebaseApp.write(`images/${productId}`, _images[productId]).catch(err => {
+        console.error('Error saving image:', err);
+      });
       return true;
     });
   }
 
   /** Remove a specific image by index */
   function removeProductImage(productId, index) {
-    const store = _getImageStore();
-    if (!store[productId]) return;
-    store[productId].splice(index, 1);
-    if (store[productId].length === 0) delete store[productId];
-    _saveImageStore(store);
+    if (!_images[productId]) return;
+    _images[productId].splice(index, 1);
+    if (_images[productId].length === 0) {
+      delete _images[productId];
+      FirebaseApp.write(`images/${productId}`, null).catch(() => { });
+    } else {
+      FirebaseApp.write(`images/${productId}`, _images[productId]).catch(() => { });
+    }
   }
 
   /** Remove ALL images for a product */
   function clearProductImages(productId) {
-    const store = _getImageStore();
-    delete store[productId];
-    _saveImageStore(store);
+    delete _images[productId];
+    FirebaseApp.write(`images/${productId}`, null).catch(() => { });
   }
 
   /** Compress an image file → base64 data URL via canvas resizing */
@@ -343,18 +539,21 @@ const Store = (() => {
     });
   }
 
-  /* HELPERS */
-  function _load(key) { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } }
-  function _save(key, data) { localStorage.setItem(key, JSON.stringify(data)); }
+  /* ============ INIT FUNCTION ============ */
+  // Called by app.js before rendering. Returns a promise.
+  function init() {
+    return _initFirebase();
+  }
 
   return {
     CATEGORIES, getCategoryName, getCategoryDesc,
     getProducts, saveProducts, resetProducts,
     getProductsByCategory, getProduct, getProductName, getProductDesc, getFeatured, searchProducts,
     getProductImages, getProductCover, addProductImage, removeProductImage, clearProductImages, compressImage,
-    getCart, addToCart, removeFromCart, updateCartQty, clearCart, getCartCount, getCartTotal,
+    getCart, saveCart, addToCart, removeFromCart, updateCartQty, clearCart, getCartCount, getCartTotal,
     getOrders, saveOrder, updateOrderStatus,
     getDeliveryPrices, saveDeliveryPrices, getDeliveryPrice, updateDeliveryPrice, getWilayaName,
-    isAdminAuth, adminLogin, adminLogout
+    isAdminAuth, adminLogin, adminLogout,
+    init
   };
 })();
